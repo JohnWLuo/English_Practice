@@ -13,12 +13,19 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.google.android.material.snackbar.Snackbar;
 import com.twilio.video.CameraCapturer;
 import com.twilio.video.ConnectOptions;
 import com.twilio.video.LocalAudioTrack;
 import com.twilio.video.LocalVideoTrack;
 import com.twilio.video.OpusCodec;
 import com.twilio.video.RemoteParticipant;
+import com.twilio.video.RemoteAudioTrack;
+import com.twilio.video.RemoteAudioTrackPublication;
+import com.twilio.video.RemoteDataTrack;
+import com.twilio.video.RemoteDataTrackPublication;
+import com.twilio.video.RemoteParticipant;
+import com.twilio.video.RemoteVideoTrack;
 import com.twilio.video.RemoteVideoTrackPublication;
 import com.twilio.video.TwilioException;
 import com.twilio.video.Video;
@@ -66,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView videoStatusTextView;
     private String remoteParticipantIdentity;
     private boolean disconnectedFromOnDestroy;
-
+    private VideoTextureView remoteParticipantVideoTextureView;
     private AudioCodec audioCodec;
     private VideoCodec videoCodec;
     private EncodingParameters encodingParameters;
@@ -122,11 +129,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void createAudioAndVideoTracks() {
-        localAudioTrack = LocalAudioTrack.create(this, true);
+        localAudioTrack = LocalAudioTrack.create(this, true, "mic");
 
         cameraCapturerCompat = new CameraCapturer(this, getAvailableCameraSource());
 
-        localVideoTrack =  LocalVideoTrack.create(this, true, cameraCapturerCompat);
+        localVideoTrack =  LocalVideoTrack.create(this, true, cameraCapturerCompat, "camera");
 
         localVideoTrack.addRenderer(localVideoTextureView);
     }
@@ -142,7 +149,7 @@ public class MainActivity extends AppCompatActivity {
         localVideoTextureView = findViewById(R.id.localContainer);
         localVideoTextureView.setMirror(true);
 
-        VideoTextureView remoteParticipantVideoTextureView = findViewById(R.id.participantContainer);
+        remoteParticipantVideoTextureView = findViewById(R.id.participantContainer);
         remoteParticipantVideoTextureView.setVisibility(GONE);
 
     }
@@ -150,7 +157,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void retrieveAccessTokenfromServer() {
         Ion.with(this)
-                .load(String.format("https://byzantine-hippopotamus-3086.twil.io/AccessToken?identity=%s", "John"))
+                .load(String.format("https://byzantine-hippopotamus-3086.twil.io/AccessToken?identity=%s", "Kevin"))
                 .asString().setCallback((e, token) -> {
                     if (e == null) {
                         this.accessToken = token;
@@ -216,6 +223,10 @@ public class MainActivity extends AppCompatActivity {
                 localParticipant = room.getLocalParticipant();
                 videoStatusTextView.setText(String.format("Connected to %s", room.getName()));
                 setTitle(room.getName());
+
+                for (RemoteParticipant remoteParticipant : room.getRemoteParticipants()) {
+                    addRemoteParticipant(remoteParticipant);
+                }
             }
 
             @Override
@@ -250,7 +261,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onParticipantConnected(Room room, RemoteParticipant remoteParticipant) {
-
+                addRemoteParticipant(remoteParticipant);
             }
 
             @Override
@@ -277,4 +288,291 @@ public class MainActivity extends AppCompatActivity {
         };
     }
 
+    /*
+     * Called when remote participant joins the room
+     */
+    private void addRemoteParticipant(RemoteParticipant remoteParticipant) {
+        remoteParticipantIdentity = remoteParticipant.getIdentity();
+        videoStatusTextView.setText(String.format("RemoteParticipant %s joined", remoteParticipantIdentity));
+
+        /*
+         * Add remote participant renderer
+         */
+        if (remoteParticipant.getRemoteVideoTracks().size() > 0) {
+            RemoteVideoTrackPublication remoteVideoTrackPublication =
+                    remoteParticipant.getRemoteVideoTracks().get(0);
+
+            /*
+             * Only render video tracks that are subscribed to
+             */
+            if (remoteVideoTrackPublication.isTrackSubscribed()) {
+                addRemoteParticipantVideo(remoteParticipant, remoteVideoTrackPublication.getRemoteVideoTrack());
+            }
+        }
+
+        /*
+         * Start listening for participant events
+         */
+        remoteParticipant.setListener(remoteParticipantListener());
+    }
+
+    private void addRemoteParticipantVideo(RemoteParticipant remoteParticipant, VideoTrack videoTrack) {
+        VideoTextureView videoTextureView = remoteParticipantVideoTextureView;
+        videoTextureView.setTag(videoTrack);
+        videoTextureView.setVisibility(View.VISIBLE);
+        videoTrack.addRenderer(videoTextureView);
+    }
+
+    private RemoteParticipant.Listener remoteParticipantListener() {
+        return new RemoteParticipant.Listener() {
+            @Override
+            public void onAudioTrackPublished(RemoteParticipant remoteParticipant,
+                                              RemoteAudioTrackPublication remoteAudioTrackPublication) {
+                Log.i(TAG, String.format("onAudioTrackPublished: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteAudioTrackPublication: sid=%s, enabled=%b, " +
+                                "subscribed=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteAudioTrackPublication.getTrackSid(),
+                        remoteAudioTrackPublication.isTrackEnabled(),
+                        remoteAudioTrackPublication.isTrackSubscribed(),
+                        remoteAudioTrackPublication.getTrackName()));
+                videoStatusTextView.setText("onAudioTrackPublished");
+            }
+
+            @Override
+            public void onAudioTrackUnpublished(RemoteParticipant remoteParticipant,
+                                                RemoteAudioTrackPublication remoteAudioTrackPublication) {
+                Log.i(TAG, String.format("onAudioTrackUnpublished: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteAudioTrackPublication: sid=%s, enabled=%b, " +
+                                "subscribed=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteAudioTrackPublication.getTrackSid(),
+                        remoteAudioTrackPublication.isTrackEnabled(),
+                        remoteAudioTrackPublication.isTrackSubscribed(),
+                        remoteAudioTrackPublication.getTrackName()));
+                videoStatusTextView.setText("onAudioTrackUnpublished");
+            }
+
+            @Override
+            public void onDataTrackPublished(RemoteParticipant remoteParticipant,
+                                             RemoteDataTrackPublication remoteDataTrackPublication) {
+                Log.i(TAG, String.format("onDataTrackPublished: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteDataTrackPublication: sid=%s, enabled=%b, " +
+                                "subscribed=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteDataTrackPublication.getTrackSid(),
+                        remoteDataTrackPublication.isTrackEnabled(),
+                        remoteDataTrackPublication.isTrackSubscribed(),
+                        remoteDataTrackPublication.getTrackName()));
+                videoStatusTextView.setText("onDataTrackPublished");
+            }
+
+            @Override
+            public void onDataTrackUnpublished(RemoteParticipant remoteParticipant,
+                                               RemoteDataTrackPublication remoteDataTrackPublication) {
+                Log.i(TAG, String.format("onDataTrackUnpublished: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteDataTrackPublication: sid=%s, enabled=%b, " +
+                                "subscribed=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteDataTrackPublication.getTrackSid(),
+                        remoteDataTrackPublication.isTrackEnabled(),
+                        remoteDataTrackPublication.isTrackSubscribed(),
+                        remoteDataTrackPublication.getTrackName()));
+                videoStatusTextView.setText("onDataTrackUnpublished");
+            }
+
+            @Override
+            public void onVideoTrackPublished(RemoteParticipant remoteParticipant,
+                                              RemoteVideoTrackPublication remoteVideoTrackPublication) {
+                Log.i(TAG, String.format("onVideoTrackPublished: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteVideoTrackPublication: sid=%s, enabled=%b, " +
+                                "subscribed=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteVideoTrackPublication.getTrackSid(),
+                        remoteVideoTrackPublication.isTrackEnabled(),
+                        remoteVideoTrackPublication.isTrackSubscribed(),
+                        remoteVideoTrackPublication.getTrackName()));
+                videoStatusTextView.setText("onVideoTrackPublished");
+            }
+
+            @Override
+            public void onVideoTrackUnpublished(RemoteParticipant remoteParticipant,
+                                                RemoteVideoTrackPublication remoteVideoTrackPublication) {
+                Log.i(TAG, String.format("onVideoTrackUnpublished: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteVideoTrackPublication: sid=%s, enabled=%b, " +
+                                "subscribed=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteVideoTrackPublication.getTrackSid(),
+                        remoteVideoTrackPublication.isTrackEnabled(),
+                        remoteVideoTrackPublication.isTrackSubscribed(),
+                        remoteVideoTrackPublication.getTrackName()));
+                videoStatusTextView.setText("onVideoTrackUnpublished");
+            }
+
+            @Override
+            public void onAudioTrackSubscribed(RemoteParticipant remoteParticipant,
+                                               RemoteAudioTrackPublication remoteAudioTrackPublication,
+                                               RemoteAudioTrack remoteAudioTrack) {
+                Log.i(TAG, String.format("onAudioTrackSubscribed: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteAudioTrack: enabled=%b, playbackEnabled=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteAudioTrack.isEnabled(),
+                        remoteAudioTrack.isPlaybackEnabled(),
+                        remoteAudioTrack.getName()));
+                videoStatusTextView.setText("onAudioTrackSubscribed");
+            }
+
+            @Override
+            public void onAudioTrackUnsubscribed(RemoteParticipant remoteParticipant,
+                                                 RemoteAudioTrackPublication remoteAudioTrackPublication,
+                                                 RemoteAudioTrack remoteAudioTrack) {
+                Log.i(TAG, String.format("onAudioTrackUnsubscribed: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteAudioTrack: enabled=%b, playbackEnabled=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteAudioTrack.isEnabled(),
+                        remoteAudioTrack.isPlaybackEnabled(),
+                        remoteAudioTrack.getName()));
+                videoStatusTextView.setText("onAudioTrackUnsubscribed");
+            }
+
+            @Override
+            public void onAudioTrackSubscriptionFailed(RemoteParticipant remoteParticipant,
+                                                       RemoteAudioTrackPublication remoteAudioTrackPublication,
+                                                       TwilioException twilioException) {
+                Log.i(TAG, String.format("onAudioTrackSubscriptionFailed: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteAudioTrackPublication: sid=%b, name=%s]" +
+                                "[TwilioException: code=%d, message=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteAudioTrackPublication.getTrackSid(),
+                        remoteAudioTrackPublication.getTrackName(),
+                        twilioException.getCode(),
+                        twilioException.getMessage()));
+                videoStatusTextView.setText("onAudioTrackSubscriptionFailed");
+            }
+
+            @Override
+            public void onDataTrackSubscribed(RemoteParticipant remoteParticipant,
+                                              RemoteDataTrackPublication remoteDataTrackPublication,
+                                              RemoteDataTrack remoteDataTrack) {
+                Log.i(TAG, String.format("onDataTrackSubscribed: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteDataTrack: enabled=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteDataTrack.isEnabled(),
+                        remoteDataTrack.getName()));
+                videoStatusTextView.setText("onDataTrackSubscribed");
+            }
+
+            @Override
+            public void onDataTrackUnsubscribed(RemoteParticipant remoteParticipant,
+                                                RemoteDataTrackPublication remoteDataTrackPublication,
+                                                RemoteDataTrack remoteDataTrack) {
+                Log.i(TAG, String.format("onDataTrackUnsubscribed: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteDataTrack: enabled=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteDataTrack.isEnabled(),
+                        remoteDataTrack.getName()));
+                videoStatusTextView.setText("onDataTrackUnsubscribed");
+            }
+
+            @Override
+            public void onDataTrackSubscriptionFailed(RemoteParticipant remoteParticipant,
+                                                      RemoteDataTrackPublication remoteDataTrackPublication,
+                                                      TwilioException twilioException) {
+                Log.i(TAG, String.format("onDataTrackSubscriptionFailed: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteDataTrackPublication: sid=%b, name=%s]" +
+                                "[TwilioException: code=%d, message=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteDataTrackPublication.getTrackSid(),
+                        remoteDataTrackPublication.getTrackName(),
+                        twilioException.getCode(),
+                        twilioException.getMessage()));
+                videoStatusTextView.setText("onDataTrackSubscriptionFailed");
+            }
+
+            @Override
+            public void onVideoTrackSubscribed(RemoteParticipant remoteParticipant,
+                                               RemoteVideoTrackPublication remoteVideoTrackPublication,
+                                               RemoteVideoTrack remoteVideoTrack) {
+                Log.i(TAG, String.format("onVideoTrackSubscribed: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteVideoTrack: enabled=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteVideoTrack.isEnabled(),
+                        remoteVideoTrack.getName()));
+                videoStatusTextView.setText("onVideoTrackSubscribed");
+                addRemoteParticipantVideo(remoteParticipant, remoteVideoTrack);
+            }
+
+            @Override
+            public void onVideoTrackUnsubscribed(RemoteParticipant remoteParticipant,
+                                                 RemoteVideoTrackPublication remoteVideoTrackPublication,
+                                                 RemoteVideoTrack remoteVideoTrack) {
+                Log.i(TAG, String.format("onVideoTrackUnsubscribed: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteVideoTrack: enabled=%b, name=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteVideoTrack.isEnabled(),
+                        remoteVideoTrack.getName()));
+                videoStatusTextView.setText("onVideoTrackUnsubscribed");
+               // removeParticipantVideo(remoteParticipant);
+            }
+
+            @Override
+            public void onVideoTrackSubscriptionFailed(RemoteParticipant remoteParticipant,
+                                                       RemoteVideoTrackPublication remoteVideoTrackPublication,
+                                                       TwilioException twilioException) {
+                Log.i(TAG, String.format("onVideoTrackSubscriptionFailed: " +
+                                "[RemoteParticipant: identity=%s], " +
+                                "[RemoteVideoTrackPublication: sid=%b, name=%s]" +
+                                "[TwilioException: code=%d, message=%s]",
+                        remoteParticipant.getIdentity(),
+                        remoteVideoTrackPublication.getTrackSid(),
+                        remoteVideoTrackPublication.getTrackName(),
+                        twilioException.getCode(),
+                        twilioException.getMessage()));
+                videoStatusTextView.setText("onVideoTrackSubscriptionFailed");
+//                Snackbar.make(connectActionFab,
+//                        String.format("Failed to subscribe to %s video track",
+//                                remoteParticipant.getIdentity()),
+//                        Snackbar.LENGTH_LONG)
+//                        .show();
+            }
+
+            @Override
+            public void onAudioTrackEnabled(RemoteParticipant remoteParticipant,
+                                            RemoteAudioTrackPublication remoteAudioTrackPublication) {
+
+            }
+
+            @Override
+            public void onAudioTrackDisabled(RemoteParticipant remoteParticipant,
+                                             RemoteAudioTrackPublication remoteAudioTrackPublication) {
+
+            }
+
+            @Override
+            public void onVideoTrackEnabled(RemoteParticipant remoteParticipant,
+                                            RemoteVideoTrackPublication remoteVideoTrackPublication) {
+
+            }
+
+            @Override
+            public void onVideoTrackDisabled(RemoteParticipant remoteParticipant,
+                                             RemoteVideoTrackPublication remoteVideoTrackPublication) {
+
+            }
+        };
+    }
 }

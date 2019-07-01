@@ -13,23 +13,21 @@
         android:layout_height="match_parent" />
 
     <com.twilio.video.VideoTextureView
+        android:id="@+id/participantContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/localContainer"
+        android:layout_marginTop="-206dp" />
+
+    <com.twilio.video.VideoTextureView
         android:id="@+id/localContainer"
         android:layout_width="158dp"
         android:layout_height="206dp"
-        android:layout_alignTop="@+id/participantContainer"
-        android:layout_alignEnd="@+id/participantContainer"
-        android:layout_alignRight="@+id/participantContainer"
-        android:layout_marginStart="226dp"
-        android:layout_marginLeft="226dp"
-        android:layout_marginTop="0dp"
+        android:layout_alignEnd="@+id/previewFrameLayout"
+        android:layout_alignRight="@id/previewFrameLayout"
         android:layout_marginEnd="0dp"
         android:layout_marginRight="0dp"
         android:visibility="visible" />
-
-    <com.twilio.video.VideoTextureView
-        android:id="@+id/participantContainer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
 
     <TextView
         android:id="@+id/videoStatusText"
