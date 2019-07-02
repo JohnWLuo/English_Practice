@@ -1,7 +1,14 @@
 package com.english.practice;
 
 import android.Manifest;
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
+import android.content.DialogInterface;
+import android.text.Editable;
+import android.widget.EditText;
+
+
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.os.Bundle;
@@ -13,7 +20,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.google.android.material.snackbar.Snackbar;
+
 import com.twilio.video.CameraCapturer;
 import com.twilio.video.ConnectOptions;
 import com.twilio.video.LocalAudioTrack;
@@ -24,7 +31,6 @@ import com.twilio.video.RemoteAudioTrack;
 import com.twilio.video.RemoteAudioTrackPublication;
 import com.twilio.video.RemoteDataTrack;
 import com.twilio.video.RemoteDataTrackPublication;
-import com.twilio.video.RemoteParticipant;
 import com.twilio.video.RemoteVideoTrack;
 import com.twilio.video.RemoteVideoTrackPublication;
 import com.twilio.video.TwilioException;
@@ -32,6 +38,7 @@ import com.twilio.video.Video;
 import com.twilio.video.VideoTextureView;
 import com.twilio.video.Room;
 import com.twilio.video.LocalParticipant;
+
 
 
 import com.twilio.video.AudioCodec;
@@ -45,15 +52,17 @@ import com.twilio.video.EncodingParameters;
 
 import android.util.Log;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.FrameLayout;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 
 import java.util.Collections;
+import java.util.Random;
 
 import static android.view.View.GONE;
+import static android.view.View.VISIBLE;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -79,6 +88,10 @@ public class MainActivity extends AppCompatActivity {
     private EncodingParameters encodingParameters;
     private int previousAudioMode;
     private static final String TAG = "English Practice";
+    private FloatingActionButton connectActionFab;
+    private AlertDialog connectDialog;
+
+
 
 
     private VideoTextureView localVideoTextureView;
@@ -89,9 +102,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         //super refers to the immediate parents onCreate method
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.content_main);
+        setContentView(R.layout.activity_main);
         videoStatusTextView = findViewById(R.id.videoStatusText);
-
+        connectActionFab = findViewById(R.id.connectFAB);
         mContext = this.getApplicationContext();
         /*
          * Check camera and microphone permissions. Needed in Android M.
@@ -112,6 +125,7 @@ public class MainActivity extends AppCompatActivity {
 
         retrieveAccessTokenfromServer();
 
+        initializeUI();
     }
 
     private boolean checkPermissionForCameraAndMicrophone() {
@@ -148,6 +162,8 @@ public class MainActivity extends AppCompatActivity {
     private void initializeVideoTextureViews() {
         localVideoTextureView = findViewById(R.id.localContainer);
         localVideoTextureView.setMirror(true);
+        localVideoTextureView.setVisibility(VISIBLE);
+
 
         remoteParticipantVideoTextureView = findViewById(R.id.participantContainer);
         remoteParticipantVideoTextureView.setVisibility(GONE);
@@ -156,15 +172,16 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void retrieveAccessTokenfromServer() {
+        int random = new Random().nextInt(100);
         Ion.with(this)
-                .load(String.format("https://byzantine-hippopotamus-3086.twil.io/AccessToken?identity=%s", "Kevin"))
+                .load(String.format("https://byzantine-hippopotamus-3086.twil.io/AccessToken?identity=" + random))
                 .asString().setCallback((e, token) -> {
                     if (e == null) {
                         this.accessToken = token;
                         /*Toast.makeText(this,
                                "This is access token " + this.accessToken, Toast.LENGTH_LONG)
                                 .show();*/
-                        connectToRoom("TestRoom");
+                        //connectToRoom("TestRoom");
                     } else {
                         Toast.makeText(this,
                                "Error Retrieving Access Token", Toast.LENGTH_LONG)
@@ -205,7 +222,7 @@ public class MainActivity extends AppCompatActivity {
         connectOptionsBuilder.encodingParameters(encodingParameters);
 
         room = Video.connect(this, connectOptionsBuilder.build(), roomListener());
-        //setDisconnectAction();
+        setDisconnectAction();
     }
 
     public AudioCodec getAudioCodec() {
@@ -319,7 +336,7 @@ public class MainActivity extends AppCompatActivity {
     private void addRemoteParticipantVideo(RemoteParticipant remoteParticipant, VideoTrack videoTrack) {
         VideoTextureView videoTextureView = remoteParticipantVideoTextureView;
         videoTextureView.setTag(videoTrack);
-        videoTextureView.setVisibility(View.VISIBLE);
+        videoTextureView.setVisibility(VISIBLE);
         videoTrack.addRenderer(videoTextureView);
     }
 
@@ -575,4 +592,87 @@ public class MainActivity extends AppCompatActivity {
             }
         };
     }
+
+    private void initializeUI() {
+        connectActionFab.setOnClickListener(connectActionClickListener());
+
+        //connectActionFab.setOnClickListener(disconnectClickListener());
+    }
+
+    private View.OnClickListener disconnectClickListener() {
+        return v -> {
+            /*
+             * Disconnect from room
+             */
+            if (room != null) {
+                room.disconnect();
+            }
+            initializeUI();
+        };
+    }
+
+    private View.OnClickListener connectActionClickListener() {
+        return v -> showConnectDialog();
+    }
+
+    private void showConnectDialog() {
+        EditText roomEditText = new EditText(this);
+        connectDialog = createConnectDialog(roomEditText,
+                connectClickListener(roomEditText),
+                cancelConnectDialogClickListener(),
+                this);
+        connectDialog.show();
+    }
+
+    public static AlertDialog createConnectDialog(EditText participantEditText,
+                                                  DialogInterface.OnClickListener callParticipantsClickListener,
+                                                  DialogInterface.OnClickListener cancelClickListener,
+                                                  Context context) {
+        AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(context);
+
+        alertDialogBuilder.setTitle("Connect to a room");
+        alertDialogBuilder.setPositiveButton("Connect", callParticipantsClickListener);
+        alertDialogBuilder.setNegativeButton("Cancel", cancelClickListener);
+        alertDialogBuilder.setCancelable(false);
+
+        setRoomNameFieldInDialog(participantEditText, alertDialogBuilder, context);
+
+        return alertDialogBuilder.create();
+    }
+
+    private static void setRoomNameFieldInDialog(EditText roomNameEditText,
+                                                 AlertDialog.Builder alertDialogBuilder,
+                                                 Context context) {
+        roomNameEditText.setHint("room name");
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT);
+        roomNameEditText.setLayoutParams(lp);
+        alertDialogBuilder.setView(roomNameEditText);
+
+
+    }
+
+
+    private DialogInterface.OnClickListener connectClickListener(final EditText roomEditText) {
+        return (dialog, which) -> {
+            /*
+             * Connect to room
+             */
+            connectToRoom(roomEditText.getText().toString());
+        };
+    }
+
+    private DialogInterface.OnClickListener cancelConnectDialogClickListener() {
+        return (dialog, which) -> {
+            initializeUI();
+            connectDialog.dismiss();
+        };
+    }
+
+    private void setDisconnectAction() {
+        connectActionFab.show();
+        connectActionFab.setOnClickListener(disconnectClickListener());
+    }
+
 }

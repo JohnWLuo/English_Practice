@@ -1,11 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:showIn="@layout/activity_main">
     <!--tools:context="com.twilio.twiliovideo.MainActivity"-->
+
+    <TextView
+        android:id="@+id/videoStatusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignStart="@+id/previewFrameLayout"
+        android:layout_alignLeft="@+id/previewFrameLayout"
+        android:layout_alignTop="@+id/previewFrameLayout"
+        android:layout_marginStart="0dp"
+        android:layout_marginLeft="0dp"
+        android:layout_marginTop="56dp"
+        android:text="@string/status"
+        android:textSize="14sp" />
 
     <FrameLayout
         android:id="@+id/previewFrameLayout"
@@ -15,25 +29,20 @@
     <com.twilio.video.VideoTextureView
         android:id="@+id/participantContainer"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="676dp"
         android:layout_below="@id/localContainer"
-        android:layout_marginTop="-206dp" />
+        android:layout_marginTop="-207dp"
+        android:visibility="invisible" />
 
     <com.twilio.video.VideoTextureView
         android:id="@+id/localContainer"
         android:layout_width="158dp"
         android:layout_height="206dp"
-        android:layout_alignEnd="@+id/previewFrameLayout"
+        android:layout_alignTop="@+id/previewFrameLayout"
+        android:layout_alignEnd="@id/previewFrameLayout"
         android:layout_alignRight="@id/previewFrameLayout"
-        android:layout_marginEnd="0dp"
-        android:layout_marginRight="0dp"
+        android:layout_marginTop="56dp"
         android:visibility="visible" />
-
-    <TextView
-        android:id="@+id/videoStatusText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Status:" />
 
 
 </RelativeLayout>
